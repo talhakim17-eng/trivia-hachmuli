@@ -3,34 +3,32 @@ import level1 from "./questions-level1.json";
 import level2 from "./questions-level2.json";
 import level3 from "./questions-level3.json";
 import level4 from "./questions-level4.json";
-import level5 from "./questions-level5.json";
 
 // ═══════════════════════════════════════════════════════════
 // קונפיגורציה
 // ═══════════════════════════════════════════════════════════
 const TOTAL_QUESTIONS = 10;
 const GAME_DURATION = 180;
-const DIFFICULTY_LABELS = { 1: "קל", 2: "בינוני", 3: "מאתגר", 4: "קשה", 5: "גאון!" };
-const DIFFICULTY_EMOJI = { 1: "🌱", 2: "🌿", 3: "🌳", 4: "🔥", 5: "🧠" };
-const QUESTION_BANKS = { 1: level1, 2: level2, 3: level3, 4: level4, 5: level5 };
+const MAX_LEVEL = 4;
+const START_LEVEL = 1;
+const DIFFICULTY_LABELS = { 1: "טיול קצר", 2: "מטייל מתחיל", 3: "תייר מנוסה", 4: "מומחה לאירופה!" };
+const DIFFICULTY_EMOJI = { 1: "🚶", 2: "🧳", 3: "🗺️", 4: "🏆" };
+const QUESTION_BANKS = { 1: level1, 2: level2, 3: level3, 4: level4 };
 
 // ═══════════════════════════════════════════════════════════
 // פונקציה לשליפת שאלות רנדומליות מהבנק
 // ═══════════════════════════════════════════════════════════
 function pickQuestions(level, count, usedIndices) {
-  const bank = QUESTION_BANKS[level] || QUESTION_BANKS[2];
-  // מסננים שאלות שכבר נשאלו
+  const bank = QUESTION_BANKS[level] || QUESTION_BANKS[1];
   const available = bank
     .map((q, i) => ({ ...q, _bankIndex: i }))
     .filter((q) => !usedIndices.has(q._bankIndex));
 
-  // אם אין מספיק שאלות חדשות — מאפסים את ההיסטוריה
   if (available.length < count) {
     usedIndices.clear();
     return pickQuestions(level, count, usedIndices);
   }
 
-  // ערבוב (Fisher-Yates)
   const shuffled = [...available];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -38,7 +36,6 @@ function pickQuestions(level, count, usedIndices) {
   }
 
   const selected = shuffled.slice(0, count);
-  // מסמנים את השאלות שנבחרו כ"שומשו"
   selected.forEach((q) => usedIndices.add(q._bankIndex));
 
   return selected.map(({ _bankIndex, ...q }) => q);
@@ -68,16 +65,17 @@ function Confetti() {
 function StartScreen({ onStart, difficulty, bankSize }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 30, textAlign: "center", direction: "rtl" }}>
-      <div style={{ fontSize: 72, marginBottom: 12, animation: "bounce 2s ease-in-out infinite" }}>🧠</div>
-      <h1 style={{ fontFamily: "'Rubik', sans-serif", fontSize: 42, fontWeight: 800, color: "#2D3436", margin: "0 0 8px 0", letterSpacing: -1 }}>חידון חכמולי</h1>
-      <p style={{ fontFamily: "'Rubik', sans-serif", fontSize: 18, color: "#636E72", margin: "0 0 16px 0", lineHeight: 1.6 }}>
-        10 שאלות ידע כללי מגוונות!<br />יש לכם 3 דקות ⏱️
+      <div style={{ fontSize: 72, marginBottom: 12, animation: "bounce 2s ease-in-out infinite" }}>✈️</div>
+      <h1 style={{ fontFamily: "'Rubik', sans-serif", fontSize: 36, fontWeight: 800, color: "#2D3436", margin: "0 0 4px 0", letterSpacing: -1 }}>נושא שנתי</h1>
+      <h2 style={{ fontFamily: "'Rubik', sans-serif", fontSize: 28, fontWeight: 700, color: "#6C5CE7", margin: "0 0 16px 0", letterSpacing: -0.5 }}>טסים לאירופה 🌍</h2>
+      <p style={{ fontFamily: "'Rubik', sans-serif", fontSize: 17, color: "#636E72", margin: "0 0 16px 0", lineHeight: 1.6 }}>
+        10 שאלות על אירופה, אנגליה והולנד!<br />יש לכם 3 דקות ⏱️
       </p>
       <div style={{ fontFamily: "'Rubik', sans-serif", fontSize: 16, fontWeight: 700, color: "#6C5CE7", background: "#F0EDFF", padding: "8px 20px", borderRadius: 20, marginBottom: 8 }}>
-        {DIFFICULTY_EMOJI[difficulty]} רמה: {DIFFICULTY_LABELS[difficulty]} ({difficulty}/5)
+        {DIFFICULTY_EMOJI[difficulty]} {DIFFICULTY_LABELS[difficulty]} ({difficulty}/{MAX_LEVEL})
       </div>
       <div style={{ fontFamily: "'Rubik', sans-serif", fontSize: 12, color: "#999", marginBottom: 24 }}>
-        📦 {bankSize} שאלות ברמה זו
+        📦 {bankSize} שאלות בשלב זה
       </div>
       <button onClick={onStart} style={{
         fontFamily: "'Rubik', sans-serif", fontSize: 22, fontWeight: 700, color: "white",
@@ -87,7 +85,7 @@ function StartScreen({ onStart, difficulty, bankSize }) {
       }}
         onMouseEnter={(e) => { e.target.style.transform = "translateY(-2px) scale(1.03)"; }}
         onMouseLeave={(e) => { e.target.style.transform = "translateY(0) scale(1)"; }}
-      >🚀 יאללה, מתחילים!</button>
+      >🚀 יוצאים לטיול!</button>
     </div>
   );
 }
@@ -124,7 +122,7 @@ function QuestionScreen({ question, questionIndex, total, score, onAnswer, timeL
         <span style={{ fontSize: 13, color: "#6C5CE7", fontWeight: 700, background: "#F0EDFF", padding: "4px 10px", borderRadius: 20 }}>⭐ {score}</span>
       </div>
       <div style={{ textAlign: "center", fontFamily: "'Rubik', sans-serif", fontSize: 12, color: "#999", marginBottom: 8 }}>
-        {DIFFICULTY_EMOJI[difficulty]} רמה {difficulty} — {DIFFICULTY_LABELS[difficulty]}
+        {DIFFICULTY_EMOJI[difficulty]} {DIFFICULTY_LABELS[difficulty]}
       </div>
       <div style={{ width: "100%", height: 6, backgroundColor: "#E8E8E8", borderRadius: 10, marginBottom: 20, overflow: "hidden" }}>
         <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg, #6C5CE7, #A78BFA)", borderRadius: 10, transition: "width 0.5s ease" }} />
@@ -167,21 +165,21 @@ function EndScreen({ score, total, onRestart, timeUp, questionsAnswered, difficu
   const percentage = questionsAnswered > 0 ? Math.round((score / questionsAnswered) * 100) : 0;
   let emoji, message;
   if (timeUp) { emoji = "⏰"; message = "נגמר הזמן!"; }
-  else if (percentage === 100) { emoji = "🏆"; message = "מושלם! אתם גאונים!"; }
+  else if (percentage === 100) { emoji = "🏆"; message = "מושלם! אתם מומחים לאירופה!"; }
   else if (percentage >= 80) { emoji = "🌟"; message = "יופי! תוצאה מעולה!"; }
   else if (percentage >= 60) { emoji = "👍"; message = "לא רע! תנסו שוב!"; }
-  else { emoji = "💪"; message = "תתאמנו ותשתפרו!"; }
+  else { emoji = "💪"; message = "תלמדו ותשתפרו!"; }
 
   let diffChangeMsg, diffColor;
-  if (newDifficulty > difficulty) { diffChangeMsg = "⬆️ עולים רמה! המשחק הבא יהיה יותר מאתגר"; diffColor = "#00B894"; }
-  else if (newDifficulty < difficulty) { diffChangeMsg = "⬇️ יורדים רמה — בפעם הבאה יהיה קצת יותר קל"; diffColor = "#E17055"; }
-  else { diffChangeMsg = "➡️ נשארים באותה רמה — בדיוק מתאים!"; diffColor = "#6C5CE7"; }
+  if (newDifficulty > difficulty) { diffChangeMsg = "⬆️ עולים שלב! המשחק הבא יהיה יותר מאתגר"; diffColor = "#00B894"; }
+  else if (newDifficulty < difficulty) { diffChangeMsg = "⬇️ יורדים שלב — בפעם הבאה יהיה קצת יותר קל"; diffColor = "#E17055"; }
+  else { diffChangeMsg = "➡️ נשארים באותו שלב — בדיוק מתאים!"; diffColor = "#6C5CE7"; }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 30, textAlign: "center", direction: "rtl" }}>
       {percentage >= 80 && !timeUp && <Confetti />}
       <div style={{ fontSize: 80, marginBottom: 16, animation: "bounce 1.5s ease-in-out infinite" }}>{emoji}</div>
-      <h1 style={{ fontFamily: "'Rubik', sans-serif", fontSize: 34, fontWeight: 800, color: "#2D3436", margin: "0 0 8px 0" }}>{message}</h1>
+      <h1 style={{ fontFamily: "'Rubik', sans-serif", fontSize: 32, fontWeight: 800, color: "#2D3436", margin: "0 0 8px 0" }}>{message}</h1>
       <div style={{ fontFamily: "'Rubik', sans-serif", fontSize: 50, fontWeight: 800, color: "#6C5CE7", margin: "8px 0" }}>{score} / {questionsAnswered}</div>
       <p style={{ fontFamily: "'Rubik', sans-serif", fontSize: 16, color: "#636E72", margin: "0 0 8px 0" }}>
         ענית נכון על {score} מתוך {questionsAnswered} שאלות
@@ -189,7 +187,7 @@ function EndScreen({ score, total, onRestart, timeUp, questionsAnswered, difficu
       </p>
       <div style={{ fontFamily: "'Rubik', sans-serif", fontSize: 15, fontWeight: 600, color: diffColor, background: "#F8F8FF", padding: "10px 20px", borderRadius: 14, marginBottom: 28, maxWidth: 320 }}>
         {diffChangeMsg}<br />
-        <span style={{ fontSize: 13, color: "#999" }}>{DIFFICULTY_EMOJI[newDifficulty]} רמה הבאה: {DIFFICULTY_LABELS[newDifficulty]} ({newDifficulty}/5)</span>
+        <span style={{ fontSize: 13, color: "#999" }}>{DIFFICULTY_EMOJI[newDifficulty]} שלב הבא: {DIFFICULTY_LABELS[newDifficulty]} ({newDifficulty}/{MAX_LEVEL})</span>
       </div>
       <button onClick={onRestart} style={{
         fontFamily: "'Rubik', sans-serif", fontSize: 20, fontWeight: 700, color: "white",
@@ -199,7 +197,7 @@ function EndScreen({ score, total, onRestart, timeUp, questionsAnswered, difficu
       }}
         onMouseEnter={(e) => { e.target.style.transform = "translateY(-2px)"; }}
         onMouseLeave={(e) => { e.target.style.transform = "translateY(0)"; }}
-      >🔄 שחקו שוב!</button>
+      >🔄 לטיול הבא!</button>
     </div>
   );
 }
@@ -214,16 +212,14 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [timeUp, setTimeUp] = useState(false);
-  const [difficulty, setDifficulty] = useState(2);
-  const [newDifficulty, setNewDifficulty] = useState(2);
+  const [difficulty, setDifficulty] = useState(START_LEVEL);
+  const [newDifficulty, setNewDifficulty] = useState(START_LEVEL);
 
-  const difficultyRef = useRef(2);
+  const difficultyRef = useRef(START_LEVEL);
   const scoreRef = useRef(0);
   const currentQRef = useRef(0);
-  // שומר לכל רמה אילו אינדקסים כבר שומשו — בסט נפרד לכל רמה
-  const usedIndicesRef = useRef({ 1: new Set(), 2: new Set(), 3: new Set(), 4: new Set(), 5: new Set() });
+  const usedIndicesRef = useRef({ 1: new Set(), 2: new Set(), 3: new Set(), 4: new Set() });
 
-  // טיימר
   useEffect(() => {
     if (screen !== "playing") return;
     if (timeLeft <= 0) {
@@ -238,7 +234,7 @@ export default function App() {
   }, [screen, timeLeft]);
 
   function calcNextDifficulty(currentDiff, finalScore) {
-    if (finalScore >= 8) return Math.min(5, currentDiff + 1);
+    if (finalScore >= 8) return Math.min(MAX_LEVEL, currentDiff + 1);
     if (finalScore <= 5) return Math.max(1, currentDiff - 1);
     return currentDiff;
   }
