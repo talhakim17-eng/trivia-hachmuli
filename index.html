@@ -229,4 +229,129 @@
     { he: "אפור", en: "GREY", color: "#95a5a6" }
   ];
 
-  function shuffle(arr)
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function buildQuestions() {
+    return shuffle(words.map(w => {
+      const direction = Math.random() < 0.5 ? "heToEn" : "enToHe";
+      const correctAnswer = direction === "heToEn" ? w.en : w.he;
+      const pool = words.filter(x => x !== w).map(x => direction === "heToEn" ? x.en : x.he);
+      const distractors = shuffle(pool).slice(0, 3);
+      const options = shuffle([correctAnswer, ...distractors]);
+      return {
+        word: w,
+        direction,
+        prompt: direction === "heToEn" ? w.he : w.en,
+        correctAnswer,
+        options
+      };
+    }));
+  }
+
+  let questions = buildQuestions();
+  let current = 0;
+  let score = 0;
+  let answered = false;
+  let wrongWords = [];
+
+  const card = document.getElementById("card");
+
+  function render() {
+    if (current >= questions.length) {
+      renderResults();
+      return;
+    }
+    const q = questions[current];
+    card.innerHTML = `
+      <div class="progress-wrap">
+        <div class="progress-bar" style="width:${(current / questions.length) * 100}%"></div>
+      </div>
+      ${q.direction === "heToEn" ? `<div class="swatch" style="background:${q.word.color}"></div>` : ""}
+      <div class="question-word">${q.prompt}</div>
+      <div class="question-hint">${q.direction === "heToEn" ? "איך אומרים את זה באנגלית?" : "מה המשמעות בעברית?"}</div>
+      <div class="options" id="options"></div>
+      <div class="feedback" id="feedback"></div>
+      <button class="next-btn" id="nextBtn" disabled>הבא →</button>
+    `;
+
+    const optionsDiv = document.getElementById("options");
+    q.options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.textContent = opt;
+      btn.onclick = () => selectAnswer(opt, btn);
+      optionsDiv.appendChild(btn);
+    });
+
+    answered = false;
+    document.getElementById("nextBtn").onclick = () => {
+      current++;
+      render();
+    };
+  }
+
+  function selectAnswer(opt, btn) {
+    if (answered) return;
+    answered = true;
+    const q = questions[current];
+    const feedback = document.getElementById("feedback");
+    const allBtns = document.querySelectorAll(".option-btn");
+    allBtns.forEach(b => b.disabled = true);
+
+    if (opt === q.correctAnswer) {
+      btn.classList.add("correct");
+      feedback.textContent = "🎉 נכון מאוד!";
+      feedback.className = "feedback correct-text";
+      score++;
+    } else {
+      btn.classList.add("wrong");
+      feedback.textContent = `לא בדיוק... התשובה הנכונה: ${q.correctAnswer}`;
+      feedback.className = "feedback wrong-text";
+      wrongWords.push(q.word);
+      allBtns.forEach(b => {
+        if (b.textContent === q.correctAnswer) b.classList.add("correct");
+      });
+    }
+    document.getElementById("nextBtn").disabled = false;
+  }
+
+  function renderResults() {
+    const pct = Math.round((score / questions.length) * 100);
+    let emoji = "🌟";
+    let msg = "כל הכבוד!";
+    if (pct < 50) { emoji = "💪"; msg = "התחלה טובה, נתרגל עוד קצת!"; }
+    else if (pct < 80) { emoji = "👏"; msg = "יפה מאוד!"; }
+    else { emoji = "🏆"; msg = "מעולה, שלטת בצבעים!"; }
+
+    card.innerHTML = `
+      <div class="score-emoji">${emoji}</div>
+      <div class="score-text">${score} מתוך ${questions.length} נכונות</div>
+      <div class="score-sub">${msg}</div>
+      ${wrongWords.length ? `
+        <div class="word-list">
+          <div style="font-weight:700; margin-bottom:6px; border:none;">כדאי לחזור על:</div>
+          ${wrongWords.map(w => `<div><span>${w.he}</span><span>${w.en}</span></div>`).join("")}
+        </div>
+      ` : ""}
+      <button class="restart-btn" id="restartBtn">🔁 עוד סיבוב</button>
+    `;
+    document.getElementById("restartBtn").onclick = () => {
+      questions = buildQuestions();
+      current = 0;
+      score = 0;
+      wrongWords = [];
+      render();
+    };
+  }
+
+  render();
+</script>
+</body>
+</html>
