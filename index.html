@@ -215,19 +215,25 @@
 </div>
 
 <script>
+  // he = משמעות בעברית, en = המילה באנגלית, translit = איך הוגים באותיות עבריות
   const words = [
-    { he: "שחור", en: "BLACK", color: "#111111" },
-    { he: "לבן", en: "WHITE", color: "#ffffff" },
-    { he: "אדום", en: "RED", color: "#e74c3c" },
-    { he: "כחול", en: "BLUE", color: "#3498db" },
-    { he: "צהוב", en: "YELLOW", color: "#f1c40f" },
-    { he: "ירוק", en: "GREEN", color: "#2ecc71" },
-    { he: "כתום", en: "ORANGE", color: "#e67e22" },
-    { he: "ורוד", en: "PINK", color: "#ff7fb0" },
-    { he: "חום", en: "BROWN", color: "#8b5a2b" },
-    { he: "סגול", en: "PURPLE", color: "#9b59b6" },
-    { he: "אפור", en: "GREY", color: "#95a5a6" }
+    { he: "שחור", en: "BLACK",  translit: "בלאק",   color: "#111111" },
+    { he: "לבן",  en: "WHITE",  translit: "וויט",    color: "#ffffff" },
+    { he: "אדום", en: "RED",    translit: "רד",      color: "#e74c3c" },
+    { he: "כחול", en: "BLUE",   translit: "בלו",     color: "#3498db" },
+    { he: "צהוב", en: "YELLOW", translit: "ילו",     color: "#f1c40f" },
+    { he: "ירוק", en: "GREEN",  translit: "גרין",    color: "#2ecc71" },
+    { he: "כתום", en: "ORANGE", translit: "אורנג'",  color: "#e67e22" },
+    { he: "ורוד", en: "PINK",   translit: "פינק",    color: "#ff7fb0" },
+    { he: "חום",  en: "BROWN",  translit: "בראון",   color: "#8b5a2b" },
+    { he: "סגול", en: "PURPLE", translit: "פרפל",    color: "#9b59b6" },
+    { he: "אפור", en: "GREY",   translit: "גריי",    color: "#95a5a6" }
   ];
+
+  // תצוגה מלאה למילה באנגלית, למשל "BLACK (בלאק)"
+  function enLabel(w) {
+    return `${w.en} (${w.translit})`;
+  }
 
   function shuffle(arr) {
     const a = [...arr];
@@ -241,14 +247,14 @@
   function buildQuestions() {
     return shuffle(words.map(w => {
       const direction = Math.random() < 0.5 ? "heToEn" : "enToHe";
-      const correctAnswer = direction === "heToEn" ? w.en : w.he;
-      const pool = words.filter(x => x !== w).map(x => direction === "heToEn" ? x.en : x.he);
+      const correctAnswer = direction === "heToEn" ? enLabel(w) : w.he;
+      const pool = words.filter(x => x !== w).map(x => direction === "heToEn" ? enLabel(x) : x.he);
       const distractors = shuffle(pool).slice(0, 3);
       const options = shuffle([correctAnswer, ...distractors]);
       return {
         word: w,
         direction,
-        prompt: direction === "heToEn" ? w.he : w.en,
+        prompt: direction === "heToEn" ? w.he : enLabel(w),
         correctAnswer,
         options
       };
@@ -337,7 +343,7 @@
       ${wrongWords.length ? `
         <div class="word-list">
           <div style="font-weight:700; margin-bottom:6px; border:none;">כדאי לחזור על:</div>
-          ${wrongWords.map(w => `<div><span>${w.he}</span><span>${w.en}</span></div>`).join("")}
+          ${wrongWords.map(w => `<div><span>${w.he}</span><span>${enLabel(w)}</span></div>`).join("")}
         </div>
       ` : ""}
       <button class="restart-btn" id="restartBtn">🔁 עוד סיבוב</button>
