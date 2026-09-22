@@ -193,17 +193,43 @@
     margin-bottom: 10px;
   }
 
+  .word-list-title {
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-size: 1.05rem;
+    text-align: center;
+  }
   .word-list {
     margin-top: 6px;
     text-align: right;
-    font-size: 0.9rem;
-    color: var(--text-soft);
+    font-size: 0.95rem;
+    color: var(--text);
   }
-  .word-list div {
+  .word-list-row {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    padding: 4px 0;
+    padding: 8px 4px;
     border-bottom: 1px dashed var(--border);
+  }
+  .word-list-row:last-child {
+    border-bottom: none;
+  }
+  .word-list-he {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+  .word-list-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+  .word-list-en {
+    color: var(--text-soft);
   }
 </style>
 </head>
@@ -215,7 +241,8 @@
 </div>
 
 <script>
-  // he = משמעות בעברית, en = המילה באנגלית, translit = איך הוגים באותיות עבריות
+  // he = Hebrew meaning, en = English word, translit = how to pronounce the
+  // English word, written in Hebrew letters, color = swatch color
   const words = [
     { he: "שחור", en: "BLACK",  translit: "בלאק",   color: "#111111" },
     { he: "לבן",  en: "WHITE",  translit: "וויט",    color: "#ffffff" },
@@ -230,7 +257,7 @@
     { he: "אפור", en: "GREY",   translit: "גריי",    color: "#95a5a6" }
   ];
 
-  // תצוגה מלאה למילה באנגלית, למשל "BLACK (בלאק)"
+  // Full display text for an English word, e.g. "BLACK (בלאק)"
   function enLabel(w) {
     return `${w.en} (${w.translit})`;
   }
@@ -245,6 +272,7 @@
   }
 
   function buildQuestions() {
+    // one question per word, random direction each time
     return shuffle(words.map(w => {
       const direction = Math.random() < 0.5 ? "heToEn" : "enToHe";
       const correctAnswer = direction === "heToEn" ? enLabel(w) : w.he;
@@ -342,8 +370,16 @@
       <div class="score-sub">${msg}</div>
       ${wrongWords.length ? `
         <div class="word-list">
-          <div style="font-weight:700; margin-bottom:6px; border:none;">כדאי לחזור על:</div>
-          ${wrongWords.map(w => `<div><span>${w.he}</span><span>${enLabel(w)}</span></div>`).join("")}
+          <div class="word-list-title">📝 מילים לתרגול חוזר</div>
+          ${wrongWords.map(w => `
+            <div class="word-list-row">
+              <span class="word-list-he">
+                <span class="word-list-swatch" style="background:${w.color}"></span>
+                ${w.he}
+              </span>
+              <span class="word-list-en">${enLabel(w)}</span>
+            </div>
+          `).join("")}
         </div>
       ` : ""}
       <button class="restart-btn" id="restartBtn">🔁 עוד סיבוב</button>
