@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>לומדים אנגלית - צבעים</title>
+<title>לומדים אנגלית</title>
 <style>
   :root {
     --bg: #fdf6e3;
@@ -100,6 +100,19 @@
     border-radius: 16px;
     margin: 0 auto 18px auto;
     border: 3px solid var(--border);
+  }
+
+  .swatch-emoji {
+    width: 90px;
+    height: 90px;
+    border-radius: 16px;
+    margin: 0 auto 18px auto;
+    border: 3px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
   }
 
   .question-word {
@@ -228,6 +241,10 @@
     border: 2px solid var(--border);
     flex-shrink: 0;
   }
+  .word-list-emoji {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
   .word-list-en {
     color: var(--text-soft);
   }
@@ -235,15 +252,17 @@
 </head>
 <body>
 <div class="app">
-  <h1>🎨 לומדים אנגלית: צבעים</h1>
+  <h1>🎓 לומדים אנגלית</h1>
   <div class="subtitle">חידון מילים שבועי</div>
   <div class="card" id="card"></div>
 </div>
 
 <script>
   // he = Hebrew meaning, en = English word, translit = how to pronounce the
-  // English word, written in Hebrew letters, color = swatch color
+  // English word, written in Hebrew letters.
+  // Visual hint: "color" for a color swatch, or "emoji" for a picture hint.
   const words = [
+    // יחידה 1: צבעים
     { he: "שחור", en: "BLACK",  translit: "בלאק",   color: "#111111" },
     { he: "לבן",  en: "WHITE",  translit: "וויט",    color: "#ffffff" },
     { he: "אדום", en: "RED",    translit: "רד",      color: "#e74c3c" },
@@ -254,7 +273,30 @@
     { he: "ורוד", en: "PINK",   translit: "פינק",    color: "#ff7fb0" },
     { he: "חום",  en: "BROWN",  translit: "בראון",   color: "#8b5a2b" },
     { he: "סגול", en: "PURPLE", translit: "פרפל",    color: "#9b59b6" },
-    { he: "אפור", en: "GREY",   translit: "גריי",    color: "#95a5a6" }
+    { he: "אפור", en: "GREY",   translit: "גריי",    color: "#95a5a6" },
+
+    // יחידה 2: מילים כלליות
+    { he: "מכונית",    en: "CAR",       translit: "קאר",     emoji: "🚗" },
+    { he: "חתול",      en: "CAT",       translit: "קאט",     emoji: "🐱" },
+    { he: "פרה",       en: "COW",       translit: "קאו",     emoji: "🐮" },
+    { he: "שעון",      en: "CLOCK",     translit: "קלוק",    emoji: "🕐" },
+    { he: "גזר",       en: "CARROT",    translit: "קרוט",    emoji: "🥕" },
+    { he: "אסטרונאוט", en: "ASTRONAUT", translit: "אסטרונאוט", emoji: "🧑‍🚀" },
+    { he: "תפוח",      en: "APPLE",     translit: "אפל",     emoji: "🍎" },
+    { he: "אבוקדו",    en: "AVOCADO",   translit: "אבוקדו",  emoji: "🥑" },
+    { he: "נמלה",      en: "ANT",       translit: "אנט",     emoji: "🐜" },
+    { he: "שולחן",     en: "TABLE",     translit: "טייבל",   emoji: "🍽️" },
+    { he: "נמר",       en: "TIGER",     translit: "טייגר",   emoji: "🐯" },
+    { he: "עץ",        en: "TREE",      translit: "טרי",     emoji: "🌳" },
+    { he: "מורה",      en: "TEACHER",   translit: "טיצ'ר",   emoji: "🧑‍🏫" },
+    { he: "שתיים",     en: "TWO",       translit: "טו",      emoji: "2️⃣" },
+    { he: "עשר",       en: "TEN",       translit: "טן",      emoji: "🔟" },
+    { he: "ארנב",      en: "RABBIT",    translit: "ראביט",   emoji: "🐰" },
+    { he: "סרגל",      en: "RULER",     translit: "רולר",    emoji: "📏" },
+    { he: "תרנגול",    en: "ROOSTER",   translit: "רוסטר",   emoji: "🐓" },
+    { he: "עכברוש",    en: "RAT",       translit: "רט",      emoji: "🐀" },
+    { he: "עצוב",      en: "SAD",       translit: "סאד",     emoji: "😢" },
+    { he: "שמח",       en: "HAPPY",     translit: "הפי",     emoji: "😊" }
   ];
 
   // Full display text for an English word, e.g. "BLACK (בלאק)"
@@ -303,11 +345,16 @@
       return;
     }
     const q = questions[current];
+    const hint = q.direction === "heToEn"
+      ? (q.word.color
+          ? `<div class="swatch" style="background:${q.word.color}"></div>`
+          : `<div class="swatch-emoji">${q.word.emoji}</div>`)
+      : "";
     card.innerHTML = `
       <div class="progress-wrap">
         <div class="progress-bar" style="width:${(current / questions.length) * 100}%"></div>
       </div>
-      ${q.direction === "heToEn" ? `<div class="swatch" style="background:${q.word.color}"></div>` : ""}
+      ${hint}
       <div class="question-word">${q.prompt}</div>
       <div class="question-hint">${q.direction === "heToEn" ? "איך אומרים את זה באנגלית?" : "מה המשמעות בעברית?"}</div>
       <div class="options" id="options"></div>
@@ -362,7 +409,7 @@
     let msg = "כל הכבוד!";
     if (pct < 50) { emoji = "💪"; msg = "התחלה טובה, נתרגל עוד קצת!"; }
     else if (pct < 80) { emoji = "👏"; msg = "יפה מאוד!"; }
-    else { emoji = "🏆"; msg = "מעולה, שלטת בצבעים!"; }
+    else { emoji = "🏆"; msg = "מעולה, שלטת במילים!"; }
 
     card.innerHTML = `
       <div class="score-emoji">${emoji}</div>
@@ -374,7 +421,9 @@
           ${wrongWords.map(w => `
             <div class="word-list-row">
               <span class="word-list-he">
-                <span class="word-list-swatch" style="background:${w.color}"></span>
+                ${w.color
+                  ? `<span class="word-list-swatch" style="background:${w.color}"></span>`
+                  : `<span class="word-list-emoji">${w.emoji}</span>`}
                 ${w.he}
               </span>
               <span class="word-list-en">${enLabel(w)}</span>
