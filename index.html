@@ -371,6 +371,22 @@
     font-size: 0.8rem;
     color: var(--text-soft);
   }
+  .speak-btn {
+    margin-top: 10px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--card-bg);
+    font-size: 1.3rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .speak-btn:hover {
+    border-color: var(--accent);
+  }
   .flash-nav {
     display: flex;
     align-items: center;
@@ -453,6 +469,16 @@
   // Full display text for an English word, e.g. "BLACK (בלאק)"
   function enLabel(w) {
     return `${w.en} (${w.translit})`;
+  }
+
+  // Read an English word aloud using the browser's built-in text-to-speech.
+  function speakEnglish(text) {
+    if (!("speechSynthesis" in window)) return; // not supported, fail silently
+    window.speechSynthesis.cancel(); // stop any speech already in progress
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.9; // slightly slower, easier for a child to follow
+    window.speechSynthesis.speak(utterance);
   }
 
   function shuffle(arr) {
@@ -555,6 +581,7 @@
             <div class="flash-face flash-face-back">
               ${visual}
               <div class="flash-word">${enLabel(w)}</div>
+              <button class="speak-btn" id="speakBtn" title="השמע שוב">🔊</button>
               <div class="flash-tap-hint">הקישו לחזור</div>
             </div>
           </div>
@@ -572,21 +599,33 @@
     flashCardEl.onclick = () => {
       flashFlipped = !flashFlipped;
       flashCardEl.classList.toggle("flipped");
+      if (flashFlipped) speakEnglish(w.en); // read it out loud the moment English is revealed
     };
 
-    document.getElementById("flashBackBtn").onclick = () => renderHome();
+    document.getElementById("speakBtn").onclick = (e) => {
+      e.stopPropagation(); // don't let the click also flip the card back
+      speakEnglish(w.en);
+    };
+
+    document.getElementById("flashBackBtn").onclick = () => {
+      window.speechSynthesis.cancel();
+      renderHome();
+    };
 
     document.getElementById("flashPrevBtn").onclick = () => {
+      window.speechSynthesis.cancel();
       flashFlipped = false;
       flashIndex = (flashIndex - 1 + flashDeck.length) % flashDeck.length;
       renderFlashcard();
     };
     document.getElementById("flashNextBtn").onclick = () => {
+      window.speechSynthesis.cancel();
       flashFlipped = false;
       flashIndex = (flashIndex + 1) % flashDeck.length;
       renderFlashcard();
     };
     document.getElementById("flashShuffleBtn").onclick = () => {
+      window.speechSynthesis.cancel();
       flashDeck = shuffle(flashDeck);
       flashIndex = 0;
       flashFlipped = false;
