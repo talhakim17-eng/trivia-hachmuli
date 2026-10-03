@@ -273,6 +273,14 @@
     transform: translateY(-2px);
     border-color: var(--accent);
   }
+  .mode-btn:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+  .mode-btn:disabled:hover {
+    transform: none;
+    border-color: var(--border);
+  }
   .mode-btn-emoji {
     font-size: 2.2rem;
     flex-shrink: 0;
@@ -481,6 +489,49 @@
     window.speechSynthesis.speak(utterance);
   }
 
+  // --- Persistent "words to practice" list (1ג') ---
+  // Stored in the browser (localStorage) so it survives between visits.
+  // A word is identified by its Hebrew+English pair.
+  const MISTAKES_KEY = "vocabQuizMistakes";
+
+  function wordKey(w) {
+    return `${w.he}|${w.en}`;
+  }
+
+  function loadMistakeKeys() {
+    try {
+      const raw = localStorage.getItem(MISTAKES_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return []; // private browsing / storage blocked - just behave as if empty
+    }
+  }
+
+  function saveMistakeKeys(keys) {
+    try {
+      localStorage.setItem(MISTAKES_KEY, JSON.stringify(keys));
+    } catch (e) {
+      // storage unavailable - nothing we can do, fail silently
+    }
+  }
+
+  // After a quiz round: add newly-wrong words, remove words now answered correctly.
+  function updateMistakes(roundWrongWords, roundRightWords) {
+    let keys = loadMistakeKeys();
+    const rightKeys = new Set(roundRightWords.map(wordKey));
+    keys = keys.filter(k => !rightKeys.has(k));
+    roundWrongWords.forEach(w => {
+      const k = wordKey(w);
+      if (!keys.includes(k)) keys.push(k);
+    });
+    saveMistakeKeys(keys);
+  }
+
+  function getMistakeWords() {
+    const keys = loadMistakeKeys();
+    return words.filter(w => keys.includes(wordKey(w)));
+  }
+
   function shuffle(arr) {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
@@ -513,6 +564,7 @@
   let score = 0;
   let answered = false;
   let wrongWords = [];
+  let rightWords = [];
 
   // Flashcards state
   let flashDeck = [];
@@ -523,6 +575,9 @@
 
   // --- Home screen ---
   function renderHome() {
+    const mistakeWords = getMistakeWords();
+    const hasMistakes = mistakeWords.length > 0;
+
     card.innerHTML = `
       <div class="mode-select">
         <button class="mode-btn" id="startQuizBtn">
@@ -539,6 +594,15 @@
             <div class="mode-btn-sub">תרגול קליל, בלי ציון - כל המילים</div>
           </span>
         </button>
+        <button class="mode-btn" id="startFlashMistakesBtn" ${hasMistakes ? "" : "disabled"}>
+          <span class="mode-btn-emoji">🎯</span>
+          <span class="mode-btn-text">
+            <div class="mode-btn-title">תרגול טעויות</div>
+            <div class="mode-btn-sub">${hasMistakes
+              ? `כרטיסיות רק על ${mistakeWords.length} מילים שטעית בהן`
+              : "אין כרגע מילים לתרגול - כל הכבוד! 🎉"}</div>
+          </span>
+        </button>
       </div>
     `;
     document.getElementById("startQuizBtn").onclick = () => {
@@ -546,11 +610,17 @@
       current = 0;
       score = 0;
       wrongWords = [];
+      rightWords = [];
       render();
     };
     document.getElementById("startFlashAllBtn").onclick = () => {
       startFlashcards(words);
     };
+    if (hasMistakes) {
+      document.getElementById("startFlashMistakesBtn").onclick = () => {
+        startFlashcards(mistakeWords);
+      };
+    }
   }
 
   // --- Flashcards ---
@@ -687,6 +757,7 @@
       feedback.textContent = "🎉 נכון מאוד!";
       feedback.className = "feedback correct-text";
       score++;
+      rightWords.push(q.word);
     } else {
       btn.classList.add("wrong");
       feedback.textContent = `לא בדיוק... התשובה הנכונה: ${q.correctAnswer}`;
@@ -700,6 +771,7 @@
   }
 
   function renderResults() {
+    updateMistakes(wrongWords, rightWords);
     const pct = Math.round((score / questions.length) * 100);
     let emoji = "🌟";
     let msg = "כל הכבוד!";
@@ -737,6 +809,7 @@
       current = 0;
       score = 0;
       wrongWords = [];
+      rightWords = [];
       render();
     };
     document.getElementById("resultsBackBtn").onclick = () => renderHome();
