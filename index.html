@@ -470,6 +470,8 @@
   // he = Hebrew meaning, en = English word, translit = how to pronounce the
   // English word, written in Hebrew letters.
   // Visual hint: "color" for a color swatch, or "emoji" for a picture hint.
+  // NOTE: new words are always added at the END of the list - the guided quiz
+  // treats the last words in the list as "the newest".
   const words = [
     // יחידה 1: צבעים
     { he: "שחור", en: "BLACK",  translit: "בלאק",   color: "#111111" },
@@ -588,6 +590,7 @@
   }
 
   // After a quiz round: add newly-wrong words, remove words now answered correctly.
+  // Only words that were actually asked in the round are touched.
   function updateMistakes(roundWrongWords, roundRightWords) {
     let keys = loadMistakeKeys();
     const rightKeys = new Set(roundRightWords.map(wordKey));
@@ -613,9 +616,26 @@
     return a;
   }
 
-  function buildQuestions() {
+  // --- Guided quiz: which words go into a round (5א') ---
+  const RECENT_COUNT = 10;        // newest words, always included in the default round
+  const DEFAULT_EXTRA_RANDOM = 5; // random older words added to the default round
+  const RANDOM_ROUND_SIZE = 15;   // size of the "random words" round
+
+  function pickQuizWords(mode) {
+    if (mode === "all") return words;
+    if (mode === "random") return shuffle(words).slice(0, RANDOM_ROUND_SIZE);
+    // default: the newest words + a few random older ones for refreshing
+    const recent = words.slice(-RECENT_COUNT);
+    const older = words.slice(0, -RECENT_COUNT);
+    const extra = shuffle(older).slice(0, DEFAULT_EXTRA_RANDOM);
+    return [...recent, ...extra];
+  }
+
+  // Builds one question per word in `subset`. Wrong answers are always drawn
+  // from the full word list, so every question still has 4 good options.
+  function buildQuestions(subset = words) {
     // one question per word, random direction each time
-    return shuffle(words.map(w => {
+    return shuffle(subset.map(w => {
       const direction = Math.random() < 0.5 ? "heToEn" : "enToHe";
       const correctAnswer = direction === "heToEn" ? enLabel(w) : w.he;
       const pool = words.filter(x => x !== w).map(x => direction === "heToEn" ? enLabel(x) : x.he);
@@ -637,6 +657,7 @@
   let answered = false;
   let wrongWords = [];
   let rightWords = [];
+  let quizMode = "default"; // "default" | "all" | "random" - remembered for "עוד סיבוב"
 
   // Flashcards state
   let flashDeck = [];
@@ -644,6 +665,51 @@
   let flashFlipped = false;
 
   const card = document.getElementById("card");
+
+  // --- Quiz setup (5א') ---
+  function startQuiz(mode) {
+    quizMode = mode;
+    questions = buildQuestions(pickQuizWords(mode));
+    current = 0;
+    score = 0;
+    wrongWords = [];
+    rightWords = [];
+    render();
+  }
+
+  function renderQuizChooser() {
+    card.innerHTML = `
+      <button class="back-link" id="chooserBackBtn">← חזרה לתפריט</button>
+      <div class="word-list-title">איזה חידון בא לך?</div>
+      <div class="mode-select">
+        <button class="mode-btn" id="quizDefaultBtn">
+          <span class="mode-btn-emoji">🌱</span>
+          <span class="mode-btn-text">
+            <div class="mode-btn-title">ברירת מחדל</div>
+            <div class="mode-btn-sub">${RECENT_COUNT} המילים החדשות + ${DEFAULT_EXTRA_RANDOM} מילים אקראיות</div>
+          </span>
+        </button>
+        <button class="mode-btn" id="quizAllBtn">
+          <span class="mode-btn-emoji">📚</span>
+          <span class="mode-btn-text">
+            <div class="mode-btn-title">כל המילים</div>
+            <div class="mode-btn-sub">${words.length} שאלות, על כל המילים</div>
+          </span>
+        </button>
+        <button class="mode-btn" id="quizRandomBtn">
+          <span class="mode-btn-emoji">🎲</span>
+          <span class="mode-btn-text">
+            <div class="mode-btn-title">${RANDOM_ROUND_SIZE} מילים אקראיות</div>
+            <div class="mode-btn-sub">סיבוב קצר על מילים מכל הרשימה</div>
+          </span>
+        </button>
+      </div>
+    `;
+    document.getElementById("chooserBackBtn").onclick = () => renderHome();
+    document.getElementById("quizDefaultBtn").onclick = () => startQuiz("default");
+    document.getElementById("quizAllBtn").onclick = () => startQuiz("all");
+    document.getElementById("quizRandomBtn").onclick = () => startQuiz("random");
+  }
 
   // --- Home screen ---
   function renderHome() {
@@ -686,14 +752,7 @@
       saveShowTranslit(showTranslit);
       renderHome();
     };
-    document.getElementById("startQuizBtn").onclick = () => {
-      questions = buildQuestions();
-      current = 0;
-      score = 0;
-      wrongWords = [];
-      rightWords = [];
-      render();
-    };
+    document.getElementById("startQuizBtn").onclick = () => renderQuizChooser();
     document.getElementById("startFlashAllBtn").onclick = () => {
       startFlashcards(words);
     };
@@ -894,14 +953,7 @@
         <button class="back-link" id="resultsBackBtn">← חזרה לתפריט</button>
       </div>
     `;
-    document.getElementById("restartBtn").onclick = () => {
-      questions = buildQuestions();
-      current = 0;
-      score = 0;
-      wrongWords = [];
-      rightWords = [];
-      render();
-    };
+    document.getElementById("restartBtn").onclick = () => startQuiz(quizMode);
     document.getElementById("resultsBackBtn").onclick = () => renderHome();
   }
 
