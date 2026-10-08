@@ -298,6 +298,40 @@
     color: var(--text-soft);
   }
 
+  .translit-toggle {
+    margin-top: 6px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    border: 2px dashed var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .translit-toggle:hover {
+    border-color: var(--accent);
+  }
+  .toggle-state {
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .flash-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .flash-top .back-link {
+    margin-bottom: 0;
+  }
+
   .back-link {
     display: inline-block;
     margin-bottom: 14px;
@@ -488,9 +522,33 @@
     { he: "משקפיים",   en: "GLASSES",   translit: "גלאסיס",  emoji: "👓" }
   ];
 
+  // --- Show/hide the Hebrew transliteration (2ג') ---
+  // Saved in the browser so the choice is remembered between visits.
+  const TRANSLIT_KEY = "vocabShowTranslit";
+
+  function loadShowTranslit() {
+    try {
+      const raw = localStorage.getItem(TRANSLIT_KEY);
+      return raw === null ? true : raw === "1"; // default: shown
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function saveShowTranslit(value) {
+    try {
+      localStorage.setItem(TRANSLIT_KEY, value ? "1" : "0");
+    } catch (e) {
+      // storage unavailable - the choice just won't be remembered
+    }
+  }
+
+  let showTranslit = loadShowTranslit();
+
   // Full display text for an English word, e.g. "BLACK (בלאק)"
+  // or just "BLACK" when the transliteration is hidden.
   function enLabel(w) {
-    return `${w.en} (${w.translit})`;
+    return showTranslit ? `${w.en} (${w.translit})` : w.en;
   }
 
   // Read an English word aloud using the browser's built-in text-to-speech.
@@ -617,8 +675,17 @@
               : "אין כרגע מילים לתרגול - כל הכבוד! 🎉"}</div>
           </span>
         </button>
+        <button class="translit-toggle" id="translitToggleBtn">
+          <span>🔤 תעתיק בעברית ליד המילה באנגלית</span>
+          <span class="toggle-state">${showTranslit ? "מוצג ✓" : "מוסתר"}</span>
+        </button>
       </div>
     `;
+    document.getElementById("translitToggleBtn").onclick = () => {
+      showTranslit = !showTranslit;
+      saveShowTranslit(showTranslit);
+      renderHome();
+    };
     document.getElementById("startQuizBtn").onclick = () => {
       questions = buildQuestions();
       current = 0;
@@ -652,7 +719,10 @@
       : `<div class="flash-visual">${w.emoji}</div>`;
 
     card.innerHTML = `
-      <button class="back-link" id="flashBackBtn">← חזרה לתפריט</button>
+      <div class="flash-top">
+        <button class="back-link" id="flashBackBtn">← חזרה לתפריט</button>
+        <button class="back-link" id="flashTranslitBtn">${showTranslit ? "הסתר תעתיק 🙈" : "הצג תעתיק 👀"}</button>
+      </div>
       <div class="flash-counter">כרטיס ${flashIndex + 1} מתוך ${flashDeck.length}</div>
       <div class="flash-card-outer">
         <div class="flash-card" id="flashCard">
@@ -694,6 +764,12 @@
     document.getElementById("flashBackBtn").onclick = () => {
       window.speechSynthesis.cancel();
       renderHome();
+    };
+
+    document.getElementById("flashTranslitBtn").onclick = () => {
+      showTranslit = !showTranslit;
+      saveShowTranslit(showTranslit);
+      renderFlashcard(); // keeps the same card and flip state
     };
 
     document.getElementById("flashPrevBtn").onclick = () => {
