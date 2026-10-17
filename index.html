@@ -457,12 +457,35 @@
     flex: 0 0 auto;
     padding: 12px 16px;
   }
+
+  /* --- Parent sign-in bar --- */
+  .auth-bar {
+    text-align: center;
+    margin: 0 auto 12px;
+    font-size: 14px;
+    color: var(--text-soft);
+    min-height: 34px;
+  }
+  .auth-btn {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .auth-btn:hover { border-color: var(--accent); }
+  .auth-status { margin-bottom: 6px; }
+  .auth-error { color: #c0392b; font-size: 13px; margin-top: 6px; }
 </style>
 </head>
 <body>
 <div class="app">
   <h1>🎓 לומדים אנגלית</h1>
   <div class="subtitle">תרגול מילים שבועי</div>
+  <div class="auth-bar" id="authBar"></div>
   <div class="card" id="card"></div>
 </div>
 
@@ -989,6 +1012,69 @@
   }
 
   renderHome();
+</script>
+
+<!-- Parent sign-in (Firebase Authentication, Google). Stage 1: sign-in only. -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+  // This config is meant to be public. Real protection = Firestore security rules.
+  const firebaseConfig = {
+    apiKey: "AIzaSyDkrymH5H7BWk7cgWxaANEDklWi82gu6UQ",
+    authDomain: "yaeli-english-2026.firebaseapp.com",
+    projectId: "yaeli-english-2026",
+    storageBucket: "yaeli-english-2026.firebasestorage.app",
+    messagingSenderId: "758274106757",
+    appId: "1:758274106757:web:3210eb73c682bdbeb290ec"
+  };
+
+  const bar = document.getElementById("authBar");
+
+  try {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    function showError(msg) {
+      const el = bar.querySelector(".auth-error");
+      if (el) el.textContent = msg;
+    }
+
+    function renderSignedOut() {
+      bar.innerHTML = `
+        <button class="auth-btn" id="signInBtn">🔐 התחברות הורה</button>
+        <div class="auth-error" id="authError"></div>
+      `;
+      document.getElementById("signInBtn").onclick = async () => {
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (e) {
+          if (e.code === "auth/popup-closed-by-user" ||
+              e.code === "auth/cancelled-popup-request") return;
+          showError("ההתחברות נכשלה (" + (e.code || "שגיאה") + ")");
+        }
+      };
+    }
+
+    function renderSignedIn(user) {
+      const who = user.displayName || user.email || "הורה";
+      bar.innerHTML = `
+        <div class="auth-status">👨‍👩‍👧 מחובר כהורה: <b></b> ✓</div>
+        <button class="auth-btn" id="signOutBtn">התנתקות</button>
+      `;
+      bar.querySelector("b").textContent = who;
+      document.getElementById("signOutBtn").onclick = () => signOut(auth);
+    }
+
+    onAuthStateChanged(auth, user => {
+      if (user) renderSignedIn(user); else renderSignedOut();
+    });
+  } catch (e) {
+    bar.textContent = "";
+    console.error("Firebase init failed", e);
+  }
 </script>
 </body>
 </html>
