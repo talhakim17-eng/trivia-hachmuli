@@ -548,7 +548,11 @@
     { he: "כוכב",      en: "STAR",       translit: "סטאר",      emoji: "⭐" },
     { he: "שש",        en: "SIX",        translit: "סיקס",      emoji: "6️⃣" },
     { he: "שבע",       en: "SEVEN",      translit: "סבן",       emoji: "7️⃣" },
-    { he: "חלב",       en: "MILK",       translit: "מילק",      emoji: "🥛" }
+    { he: "חלב",       en: "MILK",       translit: "מילק",      emoji: "🥛" },
+    { he: "בית ספר",   en: "SCHOOL",     translit: "סקול",      emoji: "🏫" },
+    { he: "אמא",       en: "MUM",        translit: "מאם",       emoji: "👩" },
+    { he: "עכביש",     en: "SPIDER",     translit: "ספיידר",    emoji: "🕷️" },
+    { he: "ירח",       en: "MOON",       translit: "מון",       emoji: "🌙" }
   ];
 
   // --- Show/hide the Hebrew transliteration (2ג') ---
@@ -644,9 +648,9 @@
   }
 
   // --- Guided quiz: which words go into a round (5א') ---
-  const RECENT_COUNT = 10;        // newest words, always included in the default round
-  const DEFAULT_EXTRA_RANDOM = 5; // random older words added to the default round
-  const RANDOM_ROUND_SIZE = 15;   // size of the "random words" round
+  const RECENT_COUNT = 18;        // newest words, always included in the default round
+  const DEFAULT_EXTRA_RANDOM = 2; // random older words added to the default round (18 + 2 = 20 questions)
+  const RANDOM_ROUND_SIZE = 20;   // size of the "random words" round
 
   function pickQuizWords(mode) {
     if (mode === "all") return words;
