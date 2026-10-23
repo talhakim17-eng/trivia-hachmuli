@@ -532,6 +532,14 @@
   }
   .ch-del:hover { border-color: var(--wrong); color: var(--wrong); }
   .ch-del.confirm { border-color: var(--wrong); color: var(--wrong); font-weight: 700; }
+  .ch-transfer {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px dashed var(--accent);
+    font-size: 14px;
+  }
+  .ch-transfer-btns { display: flex; gap: 8px; margin-top: 8px; }
   .ch-form { display: flex; gap: 8px; margin-top: 10px; }
   .ch-input {
     flex: 1;
@@ -727,8 +735,8 @@
     renderHome();
   };
 
-  function loadMistakeKeys() {
-    if (profileKeys !== null) return [...profileKeys];
+  // The browser-only (anonymous) list, always read straight from localStorage.
+  function readLocalKeys() {
     try {
       const raw = localStorage.getItem(MISTAKES_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -737,10 +745,27 @@
     }
   }
 
+  function isKnownKey(k) {
+    return words.some(w => wordKey(w) === k);
+  }
+
+  // Used by the sign-in script when a parent moves the browser's list into a profile (ב3).
+  window.getLocalMistakes = () => readLocalKeys().filter(isKnownKey);
+  window.clearLocalMistakes = () => {
+    try { localStorage.removeItem(MISTAKES_KEY); } catch (e) { /* ignore */ }
+  };
+
+  function loadMistakeKeys() {
+    if (profileKeys !== null) return [...profileKeys];
+    return readLocalKeys();
+  }
+
   function saveMistakeKeys(keys) {
     if (profileKeys !== null) {
+      const oldKeys = profileKeys;
       profileKeys = [...keys];
-      if (window.persistProfileMistakes) window.persistProfileMistakes([...keys]);
+      // Send only the CHANGES (added / removed words), so two devices never overwrite each other.
+      if (window.persistProfileMistakes) window.persistProfileMistakes(oldKeys, [...keys]);
       return;
     }
     try {
@@ -1130,7 +1155,7 @@
   } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
   import {
     getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc,
-    query, orderBy, serverTimestamp
+    query, orderBy, serverTimestamp, arrayUnion, arrayRemove
   } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
   // This config is meant to be public. Real protection = Firestore security rules.
@@ -1194,13 +1219,40 @@
       const keys = Array.isArray(data.mistakes) ? data.mistakes : [];
       activeChildId = child.id;
       saveActiveChild(user.uid, child.id);
-      window.persistProfileMistakes = (newKeys) => {
-        updateDoc(doc(db, "families", user.uid, "children", child.id), {
-          mistakes: newKeys,
-          updatedAt: serverTimestamp()
-        }).catch(e => setMsg("שמירת הטעויות בענן נכשלה (" + (e.code || "שגיאה") + ")", true));
+      window.persistProfileMistakes = (oldKeys, newKeys) => {
+        const added = newKeys.filter(k => !oldKeys.includes(k));
+        const removed = oldKeys.filter(k => !newKeys.includes(k));
+        const ref = doc(db, "families", user.uid, "children", child.id);
+        (async () => {
+          // arrayUnion / arrayRemove change only these words on the server,
+          // so a second device's changes are never overwritten.
+          if (added.length) {
+            await updateDoc(ref, { mistakes: arrayUnion(...added), updatedAt: serverTimestamp() });
+          }
+          if (removed.length) {
+            await updateDoc(ref, { mistakes: arrayRemove(...removed), updatedAt: serverTimestamp() });
+          }
+        })().catch(e => setMsg("שמירת הטעויות בענן נכשלה (" + (e.code || "שגיאה") + ")", true));
       };
       window.setActiveProfile(child.nickname, keys);
+    }
+
+    // ---------- Moving this browser's anonymous list into a profile (ב3) ----------
+    // Asked per child, once per page load if the parent says "not now".
+    const transferDismissed = new Set();
+
+    // Union (not overwrite): arrayUnion adds the local words to whatever the cloud already has.
+    // The local list is cleared ONLY after the cloud write succeeded, so nothing is lost on failure.
+    async function transferLocalMistakes(user, child) {
+      const localKeys = window.getLocalMistakes();
+      if (!localKeys.length) return 0;
+      const ref = doc(db, "families", user.uid, "children", child.id);
+      await updateDoc(ref, { mistakes: arrayUnion(...localKeys), updatedAt: serverTimestamp() });
+      const snap = await getDoc(ref);
+      const keys = (snap.exists() && Array.isArray(snap.data().mistakes)) ? snap.data().mistakes : [];
+      window.clearLocalMistakes();
+      window.setActiveProfile(child.nickname, keys);
+      return localKeys.length;
     }
 
     function setMsg(text, isErr) {
@@ -1322,6 +1374,49 @@
         row.appendChild(actions);
         listEl.appendChild(row);
       });
+
+      // Offer to move the browser's anonymous list into the active profile (ב3).
+      const activeChild = list.find(c => c.id === activeChildId);
+      const localCount = window.getLocalMistakes().length;
+      if (activeChild && localCount > 0 && !transferDismissed.has(activeChild.id)) {
+        const note = document.createElement("div");
+        note.className = "ch-transfer";
+        const text = document.createElement("div");
+        text.textContent = "יש במכשיר הזה " + localCount +
+          " מילים לתרגול שנשמרו בלי פרופיל. להעביר אותן אל " + activeChild.nickname + "?";
+        const yes = document.createElement("button");
+        yes.type = "button";
+        yes.className = "ch-add";
+        yes.textContent = "העבר";
+        const no = document.createElement("button");
+        no.type = "button";
+        no.className = "ch-del";
+        no.textContent = "לא עכשיו";
+        yes.onclick = async () => {
+          yes.disabled = true;
+          no.disabled = true;
+          try {
+            const n = await transferLocalMistakes(user, activeChild);
+            renderChildrenBox(user, list);
+            setMsg("הועברו " + n + " מילים אל " + activeChild.nickname + " ✓", false);
+          } catch (e) {
+            yes.disabled = false;
+            no.disabled = false;
+            setMsg("ההעברה נכשלה (" + (e.code || "שגיאה") + "). הרשימה במכשיר נשמרה.", true);
+          }
+        };
+        no.onclick = () => {
+          transferDismissed.add(activeChild.id);
+          renderChildrenBox(user, list);
+        };
+        const btns = document.createElement("div");
+        btns.className = "ch-transfer-btns";
+        btns.appendChild(yes);
+        btns.appendChild(no);
+        note.appendChild(text);
+        note.appendChild(btns);
+        listEl.appendChild(note);
+      }
 
       document.getElementById("chForm").onsubmit = async (ev) => {
         ev.preventDefault();
