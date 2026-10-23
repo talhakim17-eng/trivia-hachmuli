@@ -480,6 +480,13 @@
   .auth-status { margin-bottom: 6px; }
   .auth-error { color: #c0392b; font-size: 13px; margin-top: 6px; }
 
+  .who-line {
+    font-size: 14px;
+    color: var(--text-soft);
+    margin-bottom: 14px;
+  }
+  .who-line b { color: var(--accent); }
+
   /* --- Children profiles box (shown only when a parent is signed in) --- */
   .children-box {
     background: var(--card-bg);
@@ -500,6 +507,19 @@
     border-bottom: 1px dashed var(--border);
   }
   .ch-name { font-weight: 600; }
+  .ch-name.active { color: var(--accent); }
+  .ch-actions { display: flex; gap: 6px; }
+  .ch-sel {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .ch-sel.active { background: var(--accent); color: white; font-weight: 700; }
   .ch-del {
     font-family: inherit;
     font-size: 13px;
@@ -686,7 +706,29 @@
     return `${w.he}|${w.en}`;
   }
 
+  // --- Active child profile (ב2) ---
+  // profileKeys === null  -> anonymous: mistakes live in THIS browser only (localStorage).
+  // profileKeys === array -> a child profile is active: mistakes live in the cloud
+  //                          for that profile (saved through window.persistProfileMistakes,
+  //                          which the sign-in script at the bottom of the page provides).
+  let profileKeys = null;
+  let profileName = null;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+
+  // Called by the sign-in script: setActiveProfile("יעלי", [...keys]) or setActiveProfile(null, null)
+  window.setActiveProfile = function (name, keys) {
+    profileName = keys === null ? null : name;
+    profileKeys = keys === null ? null : [...keys];
+    renderHome();
+  };
+
   function loadMistakeKeys() {
+    if (profileKeys !== null) return [...profileKeys];
     try {
       const raw = localStorage.getItem(MISTAKES_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -696,6 +738,11 @@
   }
 
   function saveMistakeKeys(keys) {
+    if (profileKeys !== null) {
+      profileKeys = [...keys];
+      if (window.persistProfileMistakes) window.persistProfileMistakes([...keys]);
+      return;
+    }
     try {
       localStorage.setItem(MISTAKES_KEY, JSON.stringify(keys));
     } catch (e) {
@@ -831,6 +878,7 @@
     const hasMistakes = mistakeWords.length > 0;
 
     card.innerHTML = `
+      ${profileName ? `<div class="who-line">👧 משחקים בתור <b>${escapeHtml(profileName)}</b> - הטעויות נשמרות בענן</div>` : ""}
       <div class="mode-select">
         <button class="mode-btn" id="startQuizBtn">
           <span class="mode-btn-emoji">🧠</span>
@@ -1081,7 +1129,7 @@
     getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
   import {
-    getFirestore, collection, addDoc, getDocs, deleteDoc, doc,
+    getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc,
     query, orderBy, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
@@ -1106,11 +1154,53 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // ---------- Children profiles (stage ב1) ----------
-    // Stored at: families/{parentUid}/children/{childId} = { nickname, createdAt }
-    // Only a nickname is stored - nothing else about the child.
+    // ---------- Children profiles (ב1) + active profile & cloud mistakes (ב2) ----------
+    // Stored at: families/{parentUid}/children/{childId}
+    //   = { nickname, createdAt, mistakes: ["he|en", ...], updatedAt }
+    // Only a nickname and the list of words to practice - nothing else about the child.
     function childrenCol(uid) {
       return collection(db, "families", uid, "children");
+    }
+
+    // Which profile is active right now (null = anonymous).
+    let activeChildId = null;
+
+    // Remember the last chosen profile in this browser (only an opaque id, no name).
+    const ACTIVE_KEY = "vocabActiveChild";
+    function saveActiveChild(uid, childId) {
+      try {
+        if (childId) localStorage.setItem(ACTIVE_KEY, uid + ":" + childId);
+        else localStorage.removeItem(ACTIVE_KEY);
+      } catch (e) { /* storage unavailable - not remembered */ }
+    }
+    function readSavedChild(uid) {
+      try {
+        const raw = localStorage.getItem(ACTIVE_KEY) || "";
+        return raw.startsWith(uid + ":") ? raw.slice(uid.length + 1) : null;
+      } catch (e) { return null; }
+    }
+
+    function deactivateChild(uid) {
+      activeChildId = null;
+      window.persistProfileMistakes = null;
+      if (uid) saveActiveChild(uid, null);
+      window.setActiveProfile(null, null); // back to anonymous (browser-only) mode
+    }
+
+    async function activateChild(user, child) {
+      // Fresh read, so we never work on stale data from another device.
+      const snap = await getDoc(doc(db, "families", user.uid, "children", child.id));
+      const data = snap.exists() ? snap.data() : {};
+      const keys = Array.isArray(data.mistakes) ? data.mistakes : [];
+      activeChildId = child.id;
+      saveActiveChild(user.uid, child.id);
+      window.persistProfileMistakes = (newKeys) => {
+        updateDoc(doc(db, "families", user.uid, "children", child.id), {
+          mistakes: newKeys,
+          updatedAt: serverTimestamp()
+        }).catch(e => setMsg("שמירת הטעויות בענן נכשלה (" + (e.code || "שגיאה") + ")", true));
+      };
+      window.setActiveProfile(child.nickname, keys);
     }
 
     function setMsg(text, isErr) {
@@ -1137,135 +1227,4 @@
           <div class="ch-msg err">לא הצלחנו לטעון את הרשימה (${e.code || "שגיאה"})</div>`;
         return;
       }
-      if (!auth.currentUser || auth.currentUser.uid !== user.uid) return; // signed out meanwhile
-      renderChildrenBox(user, list);
-    }
-
-    function renderChildrenBox(user, list) {
-      box.innerHTML = `
-        <div class="ch-title">👧 הילדים שלי</div>
-        <div id="chList"></div>
-        <form class="ch-form" id="chForm">
-          <input class="ch-input" id="chInput" maxlength="${MAX_NICK_LEN}"
-                 placeholder="כינוי (למשל: יעלי)" autocomplete="off">
-          <button class="ch-add" id="chAdd" type="submit">➕ הוספה</button>
-        </form>
-        <div class="ch-msg"></div>
-      `;
-      const listEl = document.getElementById("chList");
-      if (list.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "ch-empty";
-        empty.textContent = "עדיין אין פרופילים. הוסיפו כינוי כדי להתחיל.";
-        listEl.appendChild(empty);
-      }
-      list.forEach(child => {
-        const row = document.createElement("div");
-        row.className = "ch-row";
-        const name = document.createElement("span");
-        name.className = "ch-name";
-        name.textContent = child.nickname; // textContent: nickname is never treated as HTML
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "ch-del";
-        del.textContent = "🗑 מחיקה";
-        let armed = false;
-        del.onclick = async () => {
-          if (!armed) { // first click asks for confirmation
-            armed = true;
-            del.classList.add("confirm");
-            del.textContent = "בטוחים? לחצו שוב למחיקה";
-            setTimeout(() => {
-              armed = false;
-              del.classList.remove("confirm");
-              del.textContent = "🗑 מחיקה";
-            }, 4000);
-            return;
-          }
-          del.disabled = true;
-          try {
-            await deleteDoc(doc(db, "families", user.uid, "children", child.id));
-            showChildrenBox(user);
-          } catch (e) {
-            del.disabled = false;
-            setMsg("המחיקה נכשלה (" + (e.code || "שגיאה") + ")", true);
-          }
-        };
-        row.appendChild(name);
-        row.appendChild(del);
-        listEl.appendChild(row);
-      });
-
-      document.getElementById("chForm").onsubmit = async (ev) => {
-        ev.preventDefault();
-        const input = document.getElementById("chInput");
-        const nick = input.value.trim();
-        if (!nick) { setMsg("כתבו כינוי", true); return; }
-        if (nick.length > MAX_NICK_LEN) { setMsg("הכינוי ארוך מדי", true); return; }
-        if (list.length >= MAX_CHILDREN) {
-          setMsg("אפשר עד " + MAX_CHILDREN + " פרופילים", true);
-          return;
-        }
-        const addBtn = document.getElementById("chAdd");
-        addBtn.disabled = true;
-        try {
-          await addDoc(childrenCol(user.uid), {
-            nickname: nick,
-            createdAt: serverTimestamp()
-          });
-          showChildrenBox(user);
-        } catch (e) {
-          addBtn.disabled = false;
-          setMsg("ההוספה נכשלה (" + (e.code || "שגיאה") + ")", true);
-        }
-      };
-    }
-
-    function showError(msg) {
-      const el = bar.querySelector(".auth-error");
-      if (el) el.textContent = msg;
-    }
-
-    function renderSignedOut() {
-      bar.innerHTML = `
-        <button class="auth-btn" id="signInBtn">🔐 התחברות הורה</button>
-        <div class="auth-error" id="authError"></div>
-      `;
-      document.getElementById("signInBtn").onclick = async () => {
-        try {
-          await signInWithPopup(auth, new GoogleAuthProvider());
-        } catch (e) {
-          if (e.code === "auth/popup-closed-by-user" ||
-              e.code === "auth/cancelled-popup-request") return;
-          showError("ההתחברות נכשלה (" + (e.code || "שגיאה") + ")");
-        }
-      };
-    }
-
-    function renderSignedIn(user) {
-      const who = user.displayName || user.email || "הורה";
-      bar.innerHTML = `
-        <div class="auth-status">👨‍👩‍👧 מחובר כהורה: <b></b> ✓</div>
-        <button class="auth-btn" id="signOutBtn">התנתקות</button>
-      `;
-      bar.querySelector("b").textContent = who;
-      document.getElementById("signOutBtn").onclick = () => signOut(auth);
-    }
-
-    onAuthStateChanged(auth, user => {
-      if (user) {
-        renderSignedIn(user);
-        showChildrenBox(user);
-      } else {
-        renderSignedOut();
-        box.hidden = true;
-        box.innerHTML = ""; // don't leave any child names on screen after sign-out
-      }
-    });
-  } catch (e) {
-    bar.textContent = "";
-    console.error("Firebase init failed", e);
-  }
-</script>
-</body>
-</html>
+      if (!auth.currentUser || auth.currentUser.uid !== user.uid) return; // signed out
