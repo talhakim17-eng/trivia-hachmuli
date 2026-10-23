@@ -1227,4 +1227,173 @@
           <div class="ch-msg err">לא הצלחנו לטעון את הרשימה (${e.code || "שגיאה"})</div>`;
         return;
       }
-      if (!auth.currentUser || auth.currentUser.uid !== user.uid) return; // signed out
+      if (!auth.currentUser || auth.currentUser.uid !== user.uid) return; // signed out meanwhile
+
+      // Keep the active profile consistent with the list.
+      if (activeChildId && !list.some(c => c.id === activeChildId)) {
+        deactivateChild(user.uid); // it was deleted
+      }
+      // Restore the profile chosen last time in this browser.
+      if (!activeChildId) {
+        const savedId = readSavedChild(user.uid);
+        const saved = savedId && list.find(c => c.id === savedId);
+        if (saved) {
+          try { await activateChild(user, saved); } catch (e) { /* stay anonymous */ }
+          if (!auth.currentUser || auth.currentUser.uid !== user.uid) return;
+        }
+      }
+      renderChildrenBox(user, list);
+    }
+
+    function renderChildrenBox(user, list) {
+      box.innerHTML = `
+        <div class="ch-title">👧 הילדים שלי</div>
+        <div id="chList"></div>
+        <form class="ch-form" id="chForm">
+          <input class="ch-input" id="chInput" maxlength="${MAX_NICK_LEN}"
+                 placeholder="כינוי (למשל: יעלי)" autocomplete="off">
+          <button class="ch-add" id="chAdd" type="submit">➕ הוספה</button>
+        </form>
+        <div class="ch-msg"></div>
+      `;
+      const listEl = document.getElementById("chList");
+      if (list.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "ch-empty";
+        empty.textContent = "עדיין אין פרופילים. הוסיפו כינוי כדי להתחיל.";
+        listEl.appendChild(empty);
+      }
+      list.forEach(child => {
+        const row = document.createElement("div");
+        row.className = "ch-row";
+        const isActive = child.id === activeChildId;
+        const name = document.createElement("span");
+        name.className = "ch-name" + (isActive ? " active" : "");
+        name.textContent = child.nickname; // textContent: nickname is never treated as HTML
+
+        const sel = document.createElement("button");
+        sel.type = "button";
+        sel.className = "ch-sel" + (isActive ? " active" : "");
+        sel.textContent = isActive ? "✓ פעילה (לחצו לביטול)" : "בחירה";
+        sel.onclick = async () => {
+          sel.disabled = true;
+          try {
+            if (isActive) deactivateChild(user.uid);
+            else await activateChild(user, child);
+            renderChildrenBox(user, list);
+          } catch (e) {
+            sel.disabled = false;
+            setMsg("הבחירה נכשלה (" + (e.code || "שגיאה") + ")", true);
+          }
+        };
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ch-del";
+        del.textContent = "🗑 מחיקה";
+        let armed = false;
+        del.onclick = async () => {
+          if (!armed) { // first click asks for confirmation
+            armed = true;
+            del.classList.add("confirm");
+            del.textContent = "בטוחים? לחצו שוב למחיקה";
+            setTimeout(() => {
+              armed = false;
+              del.classList.remove("confirm");
+              del.textContent = "🗑 מחיקה";
+            }, 4000);
+            return;
+          }
+          del.disabled = true;
+          try {
+            await deleteDoc(doc(db, "families", user.uid, "children", child.id));
+            if (child.id === activeChildId) deactivateChild(user.uid);
+            showChildrenBox(user);
+          } catch (e) {
+            del.disabled = false;
+            setMsg("המחיקה נכשלה (" + (e.code || "שגיאה") + ")", true);
+          }
+        };
+        const actions = document.createElement("span");
+        actions.className = "ch-actions";
+        actions.appendChild(sel);
+        actions.appendChild(del);
+        row.appendChild(name);
+        row.appendChild(actions);
+        listEl.appendChild(row);
+      });
+
+      document.getElementById("chForm").onsubmit = async (ev) => {
+        ev.preventDefault();
+        const input = document.getElementById("chInput");
+        const nick = input.value.trim();
+        if (!nick) { setMsg("כתבו כינוי", true); return; }
+        if (nick.length > MAX_NICK_LEN) { setMsg("הכינוי ארוך מדי", true); return; }
+        if (list.length >= MAX_CHILDREN) {
+          setMsg("אפשר עד " + MAX_CHILDREN + " פרופילים", true);
+          return;
+        }
+        const addBtn = document.getElementById("chAdd");
+        addBtn.disabled = true;
+        try {
+          await addDoc(childrenCol(user.uid), {
+            nickname: nick,
+            createdAt: serverTimestamp()
+          });
+          showChildrenBox(user);
+        } catch (e) {
+          addBtn.disabled = false;
+          setMsg("ההוספה נכשלה (" + (e.code || "שגיאה") + ")", true);
+        }
+      };
+    }
+
+    function showError(msg) {
+      const el = bar.querySelector(".auth-error");
+      if (el) el.textContent = msg;
+    }
+
+    function renderSignedOut() {
+      bar.innerHTML = `
+        <button class="auth-btn" id="signInBtn">🔐 התחברות הורה</button>
+        <div class="auth-error" id="authError"></div>
+      `;
+      document.getElementById("signInBtn").onclick = async () => {
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (e) {
+          if (e.code === "auth/popup-closed-by-user" ||
+              e.code === "auth/cancelled-popup-request") return;
+          showError("ההתחברות נכשלה (" + (e.code || "שגיאה") + ")");
+        }
+      };
+    }
+
+    function renderSignedIn(user) {
+      const who = user.displayName || user.email || "הורה";
+      bar.innerHTML = `
+        <div class="auth-status">👨‍👩‍👧 מחובר כהורה: <b></b> ✓</div>
+        <button class="auth-btn" id="signOutBtn">התנתקות</button>
+      `;
+      bar.querySelector("b").textContent = who;
+      document.getElementById("signOutBtn").onclick = () => signOut(auth);
+    }
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        renderSignedIn(user);
+        showChildrenBox(user);
+      } else {
+        renderSignedOut();
+        deactivateChild(null); // drop the child's cloud data from memory (the remembered choice stays)
+        box.hidden = true;
+        box.innerHTML = ""; // don't leave any child names on screen after sign-out
+      }
+    });
+  } catch (e) {
+    bar.textContent = "";
+    console.error("Firebase init failed", e);
+  }
+</script>
+</body>
+</html>
