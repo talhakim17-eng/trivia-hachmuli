@@ -479,6 +479,65 @@
   .auth-btn:hover { border-color: var(--accent); }
   .auth-status { margin-bottom: 6px; }
   .auth-error { color: #c0392b; font-size: 13px; margin-top: 6px; }
+
+  /* --- Children profiles box (shown only when a parent is signed in) --- */
+  .children-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    text-align: right;
+  }
+  .children-box[hidden] { display: none; }
+  .ch-title { font-weight: 700; margin-bottom: 8px; }
+  .ch-empty { color: var(--text-soft); font-size: 14px; margin-bottom: 8px; }
+  .ch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .ch-name { font-weight: 600; }
+  .ch-del {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+  }
+  .ch-del:hover { border-color: var(--wrong); color: var(--wrong); }
+  .ch-del.confirm { border-color: var(--wrong); color: var(--wrong); font-weight: 700; }
+  .ch-form { display: flex; gap: 8px; margin-top: 10px; }
+  .ch-input {
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .ch-add {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .ch-add:disabled { opacity: 0.5; cursor: default; }
+  .ch-msg { font-size: 13px; margin-top: 6px; min-height: 18px; color: var(--text-soft); }
+  .ch-msg.err { color: #c0392b; }
 </style>
 </head>
 <body>
@@ -486,6 +545,7 @@
   <h1>🎓 לומדים אנגלית</h1>
   <div class="subtitle">תרגול מילים שבועי</div>
   <div class="auth-bar" id="authBar"></div>
+  <div class="children-box" id="childrenBox" hidden></div>
   <div class="card" id="card"></div>
 </div>
 
@@ -1014,12 +1074,16 @@
   renderHome();
 </script>
 
-<!-- Parent sign-in (Firebase Authentication, Google). Stage 1: sign-in only. -->
+<!-- Parent sign-in (Firebase Authentication, Google) + children profiles (Firestore, Tel Aviv). -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
   import {
     getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+  import {
+    getFirestore, collection, addDoc, getDocs, deleteDoc, doc,
+    query, orderBy, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
   // This config is meant to be public. Real protection = Firestore security rules.
   const firebaseConfig = {
@@ -1032,10 +1096,130 @@
   };
 
   const bar = document.getElementById("authBar");
+  const box = document.getElementById("childrenBox");
+
+  const MAX_CHILDREN = 6;     // per family
+  const MAX_NICK_LEN = 20;    // nickname length
 
   try {
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // ---------- Children profiles (stage ב1) ----------
+    // Stored at: families/{parentUid}/children/{childId} = { nickname, createdAt }
+    // Only a nickname is stored - nothing else about the child.
+    function childrenCol(uid) {
+      return collection(db, "families", uid, "children");
+    }
+
+    function setMsg(text, isErr) {
+      const el = box.querySelector(".ch-msg");
+      if (!el) return;
+      el.textContent = text || "";
+      el.className = "ch-msg" + (isErr ? " err" : "");
+    }
+
+    async function loadChildren(user) {
+      const snap = await getDocs(query(childrenCol(user.uid), orderBy("createdAt")));
+      return snap.docs.map(d => ({ id: d.id, nickname: d.data().nickname || "" }));
+    }
+
+    async function showChildrenBox(user) {
+      box.hidden = false;
+      box.innerHTML = `<div class="ch-title">👧 הילדים שלי</div><div class="ch-empty">טוען...</div>`;
+      let list = [];
+      try {
+        list = await loadChildren(user);
+      } catch (e) {
+        if (!auth.currentUser || auth.currentUser.uid !== user.uid) return;
+        box.innerHTML = `<div class="ch-title">👧 הילדים שלי</div>
+          <div class="ch-msg err">לא הצלחנו לטעון את הרשימה (${e.code || "שגיאה"})</div>`;
+        return;
+      }
+      if (!auth.currentUser || auth.currentUser.uid !== user.uid) return; // signed out meanwhile
+      renderChildrenBox(user, list);
+    }
+
+    function renderChildrenBox(user, list) {
+      box.innerHTML = `
+        <div class="ch-title">👧 הילדים שלי</div>
+        <div id="chList"></div>
+        <form class="ch-form" id="chForm">
+          <input class="ch-input" id="chInput" maxlength="${MAX_NICK_LEN}"
+                 placeholder="כינוי (למשל: יעלי)" autocomplete="off">
+          <button class="ch-add" id="chAdd" type="submit">➕ הוספה</button>
+        </form>
+        <div class="ch-msg"></div>
+      `;
+      const listEl = document.getElementById("chList");
+      if (list.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "ch-empty";
+        empty.textContent = "עדיין אין פרופילים. הוסיפו כינוי כדי להתחיל.";
+        listEl.appendChild(empty);
+      }
+      list.forEach(child => {
+        const row = document.createElement("div");
+        row.className = "ch-row";
+        const name = document.createElement("span");
+        name.className = "ch-name";
+        name.textContent = child.nickname; // textContent: nickname is never treated as HTML
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ch-del";
+        del.textContent = "🗑 מחיקה";
+        let armed = false;
+        del.onclick = async () => {
+          if (!armed) { // first click asks for confirmation
+            armed = true;
+            del.classList.add("confirm");
+            del.textContent = "בטוחים? לחצו שוב למחיקה";
+            setTimeout(() => {
+              armed = false;
+              del.classList.remove("confirm");
+              del.textContent = "🗑 מחיקה";
+            }, 4000);
+            return;
+          }
+          del.disabled = true;
+          try {
+            await deleteDoc(doc(db, "families", user.uid, "children", child.id));
+            showChildrenBox(user);
+          } catch (e) {
+            del.disabled = false;
+            setMsg("המחיקה נכשלה (" + (e.code || "שגיאה") + ")", true);
+          }
+        };
+        row.appendChild(name);
+        row.appendChild(del);
+        listEl.appendChild(row);
+      });
+
+      document.getElementById("chForm").onsubmit = async (ev) => {
+        ev.preventDefault();
+        const input = document.getElementById("chInput");
+        const nick = input.value.trim();
+        if (!nick) { setMsg("כתבו כינוי", true); return; }
+        if (nick.length > MAX_NICK_LEN) { setMsg("הכינוי ארוך מדי", true); return; }
+        if (list.length >= MAX_CHILDREN) {
+          setMsg("אפשר עד " + MAX_CHILDREN + " פרופילים", true);
+          return;
+        }
+        const addBtn = document.getElementById("chAdd");
+        addBtn.disabled = true;
+        try {
+          await addDoc(childrenCol(user.uid), {
+            nickname: nick,
+            createdAt: serverTimestamp()
+          });
+          showChildrenBox(user);
+        } catch (e) {
+          addBtn.disabled = false;
+          setMsg("ההוספה נכשלה (" + (e.code || "שגיאה") + ")", true);
+        }
+      };
+    }
 
     function showError(msg) {
       const el = bar.querySelector(".auth-error");
@@ -1069,7 +1253,14 @@
     }
 
     onAuthStateChanged(auth, user => {
-      if (user) renderSignedIn(user); else renderSignedOut();
+      if (user) {
+        renderSignedIn(user);
+        showChildrenBox(user);
+      } else {
+        renderSignedOut();
+        box.hidden = true;
+        box.innerHTML = ""; // don't leave any child names on screen after sign-out
+      }
     });
   } catch (e) {
     bar.textContent = "";
