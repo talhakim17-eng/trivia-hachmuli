@@ -458,6 +458,63 @@
     padding: 12px 16px;
   }
 
+  /* --- Word list screen (3ה') --- */
+  .wl-search {
+    width: 100%;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .wl-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .wl-controls .back-link { margin-bottom: 0; }
+  .wl-count { font-size: 13px; color: var(--text-soft); }
+  .wl-legend { font-size: 12px; color: var(--text-soft); text-align: right; margin-bottom: 6px; }
+  .wl-list {
+    text-align: right;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+  }
+  .wl-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .wl-visual {
+    min-width: 36px;
+    display: flex;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+  .wl-he { font-weight: 600; flex: 1; }
+  .wl-en { color: var(--text-soft); font-size: 0.9rem; }
+  .wl-mark { width: 20px; text-align: center; flex-shrink: 0; }
+  .wl-speak {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    cursor: pointer;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .wl-speak:hover { border-color: var(--accent); }
+  .wl-empty { padding: 16px; color: var(--text-soft); text-align: center; }
+
   /* --- Parent sign-in bar --- */
   .auth-bar {
     text-align: center;
@@ -702,7 +759,23 @@
     { he: "אריה",          en: "LION",     translit: "לאיון",     emoji: "🦁" },
     { he: "מנעול",         en: "LOCK",     translit: "לוק",       emoji: "🔒" },
     { he: "עלה",           en: "LEAF",     translit: "ליף",       emoji: "🍃" },
-    { he: "מנורה",         en: "LAMP",     translit: "לאמפ",      emoji: "💡" }
+    { he: "מנורה",         en: "LAMP",     translit: "לאמפ",      emoji: "💡" },
+
+    // יחידה 8: מילים נוספות
+    { he: "חזיר",          en: "PIG",      translit: "פיג",       emoji: "🐖" },
+    { he: "תלמיד",         en: "STUDENT",  translit: "סטודנט",    emoji: "🧑‍🎓" },
+    { he: "בריכה",         en: "POOL",     translit: "פול",       emoji: "🏊" },
+    { he: "עפרון",         en: "PENCIL",   translit: "פנסיל",     emoji: "✏️" },
+    { he: "עט",            en: "PEN",      translit: "פן",        emoji: "🖊️" },
+    { he: "ברווז",         en: "DUCK",     translit: "דאק",       emoji: "🦆" },
+    { he: "סלט",           en: "SALAD",    translit: "סאלד",      emoji: "🥗" },
+    { he: "קר",            en: "COOL",     translit: "קול",       emoji: "🥶" },
+    { he: "מספר",          en: "NUMBER",   translit: "נאמבר",     emoji: "🔢" },
+    { he: "מחברת",         en: "NOTEBOOK", translit: "נוטבוק",    emoji: "📓" },
+    { he: "קן של ציפור",   en: "NEST",     translit: "נסט",       emoji: "🪺" },
+    { he: "תשע",           en: "NINE",     translit: "ניין",      emoji: "9️⃣" },
+    { he: "רופא",          en: "DOCTOR",   translit: "דוקטר",     emoji: "🧑‍⚕️" },
+    { he: "מנגו",          en: "MANGO",    translit: "מנגו",      emoji: "🥭" }
   ];
 
   // --- Show/hide the Hebrew transliteration (2ג') ---
@@ -967,6 +1040,13 @@
               : "אין כרגע מילים לתרגול - כל הכבוד! 🎉"}</div>
           </span>
         </button>
+        <button class="mode-btn" id="startWordListBtn">
+          <span class="mode-btn-emoji">📖</span>
+          <span class="mode-btn-text">
+            <div class="mode-btn-title">רשימת המילים</div>
+            <div class="mode-btn-sub">${words.length} מילים - צפייה, חיפוש והשמעה</div>
+          </span>
+        </button>
         <button class="translit-toggle" id="translitToggleBtn">
           <span>🔤 תעתיק בעברית ליד המילה באנגלית</span>
           <span class="toggle-state">${showTranslit ? "מוצג ✓" : "מוסתר"}</span>
@@ -982,11 +1062,94 @@
     document.getElementById("startFlashAllBtn").onclick = () => {
       startFlashcards(words);
     };
+    document.getElementById("startWordListBtn").onclick = () => renderWordList();
     if (hasMistakes) {
       document.getElementById("startFlashMistakesBtn").onclick = () => {
         startFlashcards(mistakeWords);
       };
     }
+  }
+
+  // --- Word list screen (3ה') ---
+  // View-only list of every word currently in the app, with search, sorting and audio.
+  let listSort = "newest"; // "newest" (newest words on top) | "abc" (English A-Z)
+  let listQuery = "";
+
+  function updateWordListBody() {
+    const body = document.getElementById("wordListBody");
+    const count = document.getElementById("wordListCount");
+    const mistakeKeys = new Set(loadMistakeKeys());
+    const q = listQuery.trim().toLowerCase();
+
+    let items = words.filter(w => !q ||
+      w.he.includes(q) || w.en.toLowerCase().includes(q) || w.translit.includes(q));
+    items = listSort === "abc"
+      ? [...items].sort((a, b) => a.en.localeCompare(b.en))
+      : [...items].reverse();
+
+    count.textContent = q
+      ? `נמצאו ${items.length} מתוך ${words.length} מילים`
+      : `${words.length} מילים`;
+
+    if (items.length === 0) {
+      body.innerHTML = `<div class="wl-empty">לא נמצאו מילים</div>`;
+      return;
+    }
+    body.innerHTML = items.map(w => `
+      <div class="wl-row">
+        <span class="wl-visual">${w.color
+          ? `<span class="word-list-swatch" style="background:${w.color}"></span>`
+          : w.emoji}</span>
+        <span class="wl-he">${w.he}</span>
+        <span class="wl-en">${enLabel(w)}</span>
+        <span class="wl-mark">${mistakeKeys.has(wordKey(w)) ? "🎯" : ""}</span>
+        <button class="wl-speak" data-en="${w.en}" title="השמע">🔊</button>
+      </div>
+    `).join("");
+  }
+
+  function renderWordList() {
+    const hasMistakes = loadMistakeKeys().some(isKnownKey);
+    card.innerHTML = `
+      <div class="flash-top">
+        <button class="back-link" id="wlBackBtn">← חזרה לתפריט</button>
+        <button class="back-link" id="wlTranslitBtn">${showTranslit ? "הסתר תעתיק 🙈" : "הצג תעתיק 👀"}</button>
+      </div>
+      <div class="word-list-title">📖 רשימת המילים</div>
+      <input class="wl-search" id="wlSearch" type="search" autocomplete="off"
+             placeholder="חיפוש (עברית או אנגלית)" value="${escapeHtml(listQuery)}">
+      <div class="wl-controls">
+        <span class="wl-count" id="wordListCount"></span>
+        <button class="back-link" id="wlSortBtn">${listSort === "abc" ? "מיון: א-ב באנגלית" : "מיון: החדשות למעלה"}</button>
+      </div>
+      ${hasMistakes ? `<div class="wl-legend">🎯 = מילה ברשימת התרגול</div>` : ""}
+      <div class="wl-list" id="wordListBody"></div>
+    `;
+
+    document.getElementById("wlBackBtn").onclick = () => {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      listQuery = ""; // start fresh next time
+      renderHome();
+    };
+    document.getElementById("wlTranslitBtn").onclick = () => {
+      showTranslit = !showTranslit;
+      saveShowTranslit(showTranslit);
+      renderWordList();
+    };
+    document.getElementById("wlSortBtn").onclick = () => {
+      listSort = listSort === "abc" ? "newest" : "abc";
+      renderWordList();
+    };
+    // Update only the rows while typing, so the search box keeps focus.
+    document.getElementById("wlSearch").oninput = (e) => {
+      listQuery = e.target.value;
+      updateWordListBody();
+    };
+    document.getElementById("wordListBody").onclick = (e) => {
+      const btn = e.target.closest(".wl-speak");
+      if (btn) speakEnglish(btn.dataset.en);
+    };
+    updateWordListBody();
   }
 
   // --- Flashcards ---
